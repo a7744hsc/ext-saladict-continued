@@ -82,8 +82,22 @@ export function isBlacklisted(config: AppConfig): boolean {
 export async function newSelectionWord(
   word: Partial<Word> = {}
 ): Promise<Word> {
-  const info = await message.send<'PAGE_INFO'>({ type: 'PAGE_INFO' })
-  window.faviconURL = info.faviconURL
+  let info: { faviconURL?: string; pageTitle?: string; pageURL?: string } = {}
+  try {
+    const response = await message.send<'PAGE_INFO'>({ type: 'PAGE_INFO' })
+    if (response) {
+      info = response
+    }
+  } catch (e) {
+    // Background service worker might not be ready yet
+    if (process.env.DEBUG) {
+      console.warn('PAGE_INFO request failed:', e)
+    }
+  }
+
+  if (info.faviconURL) {
+    window.faviconURL = info.faviconURL
+  }
   if (info.pageTitle) {
     window.pageTitle = info.pageTitle
   }
@@ -91,9 +105,9 @@ export async function newSelectionWord(
     window.pageURL = info.pageURL
   }
   return newWord({
-    title: info.pageTitle || document.title || '',
-    url: info.pageURL || document.URL || '',
-    favicon: info.faviconURL || '',
+    title: info.pageTitle || window.pageTitle || document.title || '',
+    url: info.pageURL || window.pageURL || document.URL || '',
+    favicon: info.faviconURL || window.faviconURL || '',
     ...word
   })
 }

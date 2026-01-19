@@ -5,6 +5,7 @@ import { createConfigStream } from '@/_helpers/config-manager'
 import { isFirefox } from '@/_helpers/saladict'
 import { reportEvent } from '@/_helpers/analytics'
 import './types'
+import { getAppConfig } from './index'
 
 import { TFunction } from 'i18next'
 import { I18nManager } from './i18n-manager'
@@ -59,17 +60,14 @@ export class ContextMenus {
 
   static init = ContextMenus.getInstance
 
-  static openGoogle() {
-    return tryExecuteScript(
-      { file: '/assets/google-page-trans.js' },
-      'google_page_translate'
-    )
+  static async openGoogle() {
+    return tryExecuteScript('/assets/google-page-trans.js', 'google_page_translate')
   }
 
-  static openCaiyunTrs() {
+  static async openCaiyunTrs() {
     // FF policy
     if (isFirefox) return
-    return tryExecuteScript({ file: '/assets/trs.js' }, 'caiyuntrs')
+    return tryExecuteScript('/assets/trs.js', 'caiyuntrs')
   }
 
   static async openYoudao() {
@@ -77,10 +75,10 @@ export class ContextMenus {
     if (isFirefox) return
     // inject youdao script, defaults to the active tab of the current window.
     const result = await tryExecuteScript(
-      { file: '/assets/fanyi.youdao.2.0/main.js' },
+      '/assets/fanyi.youdao.2.0/main.js',
       'youdao_page_translate'
     )
-    if (!result || ((result as any) !== 1 && result[0] !== 1)) {
+    if (!result || ((result as any) !== 1 && result[0]?.result !== 1)) {
       await browser.notifications.create({
         type: 'basic',
         eventTime: Date.now() + 4000,
@@ -96,10 +94,11 @@ export class ContextMenus {
   static openBaiduPage() {
     browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
       if (tabs.length > 0 && tabs[0].url) {
+        const appConfig = getAppConfig()
         const langCode =
-          window.appConfig.langCode === 'zh-CN'
+          appConfig?.langCode === 'zh-CN'
             ? 'zh'
-            : window.appConfig.langCode === 'zh-TW'
+            : appConfig?.langCode === 'zh-TW'
             ? 'cht'
             : 'en'
         openUrl(
@@ -114,7 +113,8 @@ export class ContextMenus {
   static openSogouPage() {
     browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
       if (tabs.length > 0 && tabs[0].url) {
-        const langCode = window.appConfig.langCode === 'zh-CN' ? 'zh-CHS' : 'en'
+        const appConfig = getAppConfig()
+        const langCode = appConfig?.langCode === 'zh-CN' ? 'zh-CHS' : 'en'
         openUrl(
           `https://translate.sogoucdn.com/pcvtsnapshot?from=auto&to=${langCode}&tfr=translatepc&url=${encodeURIComponent(
             tabs[0].url as string
@@ -127,10 +127,11 @@ export class ContextMenus {
   static openMicrosoftPage() {
     browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
       if (tabs.length > 0 && tabs[0].url) {
+        const appConfig = getAppConfig()
         const langCode =
-          window.appConfig.langCode === 'zh-CN'
+          appConfig?.langCode === 'zh-CN'
             ? 'zh-Hans'
-            : window.appConfig.langCode === 'zh-TW'
+            : appConfig?.langCode === 'zh-TW'
             ? 'zh-Hant'
             : 'en'
         openUrl(
@@ -154,6 +155,7 @@ export class ContextMenus {
     const menuItemId = String(info.menuItemId).replace(/_ba$/, '')
     const selectionText = info.selectionText || ''
     const linkUrl = info.linkUrl || ''
+    const appConfig = getAppConfig()
     switch (menuItemId) {
       case 'google_page_translate':
         ContextMenus.openGoogle()
@@ -200,7 +202,7 @@ export class ContextMenus {
         break
       default:
         {
-          const item = window.appConfig.contextMenus.all[menuItemId]
+          const item = appConfig?.contextMenus.all[menuItemId]
           if (item) {
             const url = typeof item === 'string' ? item : item.url
             if (url) {
@@ -231,7 +233,18 @@ export class ContextMenus {
     AppConfig,
     TFunction
   ]): Promise<void> {
-    if (!browser.extension.inIncognitoContext) {
+    // In MV3, check if we're in incognito context differently
+    const isIncognito = await (async () => {
+      try {
+        // This method works in both MV2 and MV3
+        const contexts = await chrome.runtime.getContexts({})
+        return contexts.some(ctx => ctx.incognito)
+      } catch {
+        return false
+      }
+    })()
+
+    if (!isIncognito) {
       // In 'split' incognito mode, this will also remove the items on normal mode windows
       await browser.contextMenus.removeAll()
     }
@@ -310,17 +323,18 @@ export class ContextMenus {
       await createContextMenu(optionList[0])
     }
 
+    // In MV3, use 'action' instead of 'browser_action'
     await createContextMenu({
       id: 'view_as_pdf_ba',
       title: t('view_as_pdf'),
-      contexts: ['browser_action', 'page_action']
+      contexts: ['action']
     })
 
     if (browserActionItems.length > 2) {
       await createContextMenu({
         id: 'saladict_ba_container',
         title: t('page_translations'),
-        contexts: ['browser_action', 'page_action']
+        contexts: ['action']
       })
 
       for (const id of browserActionItems) {
@@ -328,7 +342,7 @@ export class ContextMenus {
           id: id + '_ba',
           parentId: 'saladict_ba_container',
           title: getTitle(id),
-          contexts: ['browser_action', 'page_action']
+          contexts: ['action']
         })
       }
     } else if (browserActionItems.length > 0) {
@@ -336,7 +350,7 @@ export class ContextMenus {
         await createContextMenu({
           id: id + '_ba',
           title: getTitle(id),
-          contexts: ['browser_action', 'page_action']
+          contexts: ['action']
         })
       }
     } else {
@@ -344,19 +358,19 @@ export class ContextMenus {
       await createContextMenu({
         id: 'google_cn_page_translate_ba',
         title: t('google_cn_page_translate'),
-        contexts: ['browser_action', 'page_action']
+        contexts: ['action']
       })
       await createContextMenu({
         id: 'youdao_page_translate_ba',
         title: t('youdao_page_translate'),
-        contexts: ['browser_action', 'page_action']
+        contexts: ['action']
       })
     }
 
     await createContextMenu({
       type: 'separator',
       id: Date.now().toString(),
-      contexts: ['browser_action']
+      contexts: ['action']
     })
 
     if (searchHistory) {
@@ -364,7 +378,7 @@ export class ContextMenus {
       await createContextMenu({
         id: 'search_history',
         title: t('history_title'),
-        contexts: ['browser_action']
+        contexts: ['action']
       })
     }
 
@@ -372,7 +386,7 @@ export class ContextMenus {
     await createContextMenu({
       id: 'notebook',
       title: t('notebook_title'),
-      contexts: ['browser_action']
+      contexts: ['action']
     })
 
     function getTitle(id: string): string {
@@ -396,11 +410,23 @@ export class ContextMenus {
 }
 
 async function tryExecuteScript(
-  details: browser.extensionTypes.InjectDetails,
+  file: string,
   nameKey: string
 ) {
   try {
-    return await browser.tabs.executeScript(details)
+    // Get the active tab
+    const tabs = await browser.tabs.query({ active: true, currentWindow: true })
+    if (tabs.length === 0 || !tabs[0].id) {
+      throw new Error('No active tab')
+    }
+
+    // Use chrome.scripting.executeScript for MV3
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tabs[0].id },
+      files: [file]
+    })
+
+    return results
   } catch (error) {
     const { i18n } = await I18nManager.getInstance()
     await browser.notifications.create({

@@ -21,6 +21,8 @@ import { QsPanelManager } from './windows-manager'
 import { getTextFromClipboard, copyTextToClipboard } from './clipboard-manager'
 import './types'
 import { DictID } from '@/app-config'
+import { getAppConfig, getActiveProfile } from './index'
+import { getDictEngine as getDictEngineStatic } from './dict-engines'
 
 /**
  * background script as transfer station
@@ -43,11 +45,12 @@ export class BackgroundServer {
     search: SearchFunction<DictSearchResult<any>, P>
     getSrcPage: GetSrcPageFunction
   }> {
-    return import(
-      /* webpackInclude: /engine\.ts$/ */
-      /* webpackMode: "lazy" */
-      `@/components/dictionaries/${id}/engine.ts`
-    )
+    // Use static imports for service worker compatibility
+    const engine = getDictEngineStatic(id)
+    if (engine) {
+      return Promise.resolve(engine as any)
+    }
+    return Promise.reject(new Error(`Dictionary engine not found: ${id}`))
   }
 
   private qsPanelManager: QsPanelManager
@@ -174,11 +177,13 @@ export class BackgroundServer {
     active
   }: Message<'OPEN_DICT_SRC_PAGE'>['payload']): Promise<void> {
     const engine = await BackgroundServer.getDictEngine(id)
+    const appConfig = getAppConfig()
+    const activeProfile = getActiveProfile()
     return openUrl({
       url: await engine.getSrcPage(
         text,
-        window.appConfig,
-        window.activeProfile
+        appConfig!,
+        activeProfile!
       ),
       active
     })
@@ -188,6 +193,8 @@ export class BackgroundServer {
     data: Message<'FETCH_DICT_RESULT'>['payload']
   ): Promise<MessageResponse<'FETCH_DICT_RESULT'>> {
     const payload = data.payload || {}
+    const appConfig = getAppConfig()
+    const activeProfile = getActiveProfile()
 
     let response: DictSearchResult<any> | undefined
 
@@ -198,7 +205,7 @@ export class BackgroundServer {
 
       try {
         response = await timeout(
-          search(data.text, window.appConfig, window.activeProfile, payload),
+          search(data.text, appConfig!, activeProfile!, payload),
           25000
         )
       } catch (e) {
@@ -206,7 +213,7 @@ export class BackgroundServer {
           // retry once
           await timer(500)
           response = await timeout(
-            search(data.text, window.appConfig, window.activeProfile, payload),
+            search(data.text, appConfig!, activeProfile!, payload),
             25000
           )
         } else {
@@ -250,29 +257,32 @@ export class BackgroundServer {
   }
 
   /** Bypass http restriction */
-  youdaoTranslateAjax(request: any): Promise<any> {
-    return new Promise(resolve => {
-      const xhr = new XMLHttpRequest()
-      xhr.onreadystatechange = () => {
-        if (xhr.readyState === 4) {
-          const data = xhr.status === 200 ? xhr.responseText : null
-          resolve({
-            response: data,
-            index: request.index
-          })
-        }
+  async youdaoTranslateAjax(request: any): Promise<any> {
+    try {
+      const options: RequestInit = {
+        method: request.type,
+        headers: {}
       }
-      xhr.open(request.type, request.url, true)
 
       if (request.type === 'POST') {
-        xhr.setRequestHeader(
-          'Content-Type',
-          'application/x-www-form-urlencoded'
-        )
-        xhr.send(request.data)
-      } else {
-        xhr.send(null as any)
+        options.headers = {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+        options.body = request.data
       }
-    })
+
+      const response = await fetch(request.url, options)
+      const data = response.ok ? await response.text() : null
+
+      return {
+        response: data,
+        index: request.index
+      }
+    } catch {
+      return {
+        response: null,
+        index: request.index
+      }
+    }
   }
 }

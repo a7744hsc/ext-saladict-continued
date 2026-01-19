@@ -16,7 +16,23 @@ import { reportEvent } from '@/_helpers/analytics'
 import { ContextMenus } from './context-menus'
 import { BackgroundServer } from './server'
 import { openPDF } from './pdf-sniffer'
+import { getAppConfig, getActiveProfile, getProfileIDList } from './index'
 import './types'
+
+// Handle WTW_INJECT messages from webpack runtime for dynamic chunk loading
+// This allows content scripts to load additional chunks on demand
+browser.runtime.onMessage.addListener((message, sender) => {
+  if (message && message.type === 'WTW_INJECT' && message.file && sender.tab?.id) {
+    // Inject the requested script file into the tab
+    chrome.scripting.executeScript({
+      target: { tabId: sender.tab.id },
+      files: [message.file]
+    }).catch(err => {
+      console.warn('WTW_INJECT failed:', err)
+    })
+    return true
+  }
+})
 
 browser.runtime.onInstalled.addListener(onInstalled)
 browser.runtime.onStartup.addListener(onStartup)
@@ -37,16 +53,22 @@ browser.commands.onCommand.addListener(onCommand)
 const getText = decodeURI
 
 function onCommand(command: string) {
+  const appConfig = getAppConfig()
+  const activeProfile = getActiveProfile()
+  const profileIDList = getProfileIDList()
+
   switch (command) {
     case 'toggle-active':
-      updateConfig({
-        ...window.appConfig,
-        active: !window.appConfig.active
-      })
+      if (appConfig) {
+        updateConfig({
+          ...appConfig,
+          active: !appConfig.active
+        })
+      }
       break
     case 'toggle-instant':
       browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
-        if (tabs.length <= 0 || tabs[0].id == null) {
+        if (tabs.length <= 0 || tabs[0].id == null || !appConfig) {
           return
         }
         message
@@ -54,7 +76,7 @@ function onCommand(command: string) {
             type: 'QUERY_PIN_STATE'
           })
           .then(isPinned => {
-            const config = window.appConfig
+            const config = appConfig
             const { enable } = config[isPinned ? 'pinMode' : 'mode'].instant
 
             updateConfig({
@@ -142,15 +164,16 @@ function onCommand(command: string) {
     case 'next-profile':
     case 'prev-profile':
       {
-        const curID = window.activeProfile.id
-        const curIndex = window.profileIDList.findIndex(
+        if (!activeProfile || !profileIDList) break
+        const curID = activeProfile.id
+        const curIndex = profileIDList.findIndex(
           ({ id }) => id === curID
         )
         const offset = command === 'next-profile' ? 1 : -1
         const nextIndex =
-          curIndex < 0 ? 0 : (curIndex + offset) % window.profileIDList.length
+          curIndex < 0 ? 0 : (curIndex + offset) % profileIDList.length
 
-        updateActiveProfileID(window.profileIDList[nextIndex].id).then(
+        updateActiveProfileID(profileIDList[nextIndex].id).then(
           searchTextBox
         )
       }
@@ -161,12 +184,13 @@ function onCommand(command: string) {
     case 'profile-4':
     case 'profile-5':
       {
+        if (!activeProfile || !profileIDList) break
         const index = +command.slice(-1)
         if (
-          index < window.profileIDList.length &&
-          window.profileIDList[index].id !== window.activeProfile.id
+          index < profileIDList.length &&
+          profileIDList[index].id !== activeProfile.id
         ) {
-          updateActiveProfileID(window.profileIDList[index].id).then(
+          updateActiveProfileID(profileIDList[index].id).then(
             searchTextBox
           )
         }
@@ -185,8 +209,11 @@ async function onInstalled({
   reason: string
   previousVersion?: string
 }) {
-  window.appConfig = await initConfig()
-  window.activeProfile = await initProfiles()
+  const appConfig = await initConfig()
+  const activeProfile = await initProfiles()
+
+  // Store in module-level state (these will be picked up by index.ts)
+  // The actual state management is handled in index.ts
 
   await storage.local.set(
     mapValues(await storage.local.get(null), (value, key) => {
@@ -201,7 +228,7 @@ async function onInstalled({
       !(await storage.sync.get('hasInstructionsShown')).hasInstructionsShown
     ) {
       openUrl('options.html?menuselected=Privacy&nopanel=true', true)
-      if (window.appConfig.langCode.startsWith('zh')) {
+      if (appConfig.langCode.startsWith('zh')) {
         openUrl('https://saladict.crimx.com/notice.html')
       } else {
         openUrl('https://saladict.crimx.com/en/notice.html')
@@ -216,7 +243,7 @@ async function onInstalled({
         const { diff, data } = await checkUpdate(previousVersion, curr.data)
         if (data && diff >= 2) {
           setTimeout(() => {
-            const isZh = window.appConfig.langCode.startsWith('zh')
+            const isZh = appConfig.langCode.startsWith('zh')
             const options = {
               type: 'basic',
               iconUrl: browser.runtime.getURL(`assets/icon-128.png`),
@@ -258,7 +285,8 @@ async function onInstalled({
 function onStartup(): void {
   setTimeout(() => {
     // wait for appConfig being loaded
-    if (!process.env.DEBUG && window.appConfig.updateCheck) {
+    const appConfig = getAppConfig()
+    if (!process.env.DEBUG && appConfig?.updateCheck) {
       storage.local
         .get<{ lastCheckUpdate: number }>('lastCheckUpdate')
         .then(async ({ lastCheckUpdate }) => {

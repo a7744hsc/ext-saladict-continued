@@ -364,13 +364,13 @@ async function messageSendSelf<T extends MsgType, R = undefined>(
     callContext = new Error('Message Call Context')
   }
 
-  if (window.pageId === undefined) {
+  if ((globalThis as any).pageId === undefined) {
     await initClient()
   }
   return browser.runtime
     .sendMessage(
       Object.assign({}, message, {
-        __pageId__: window.pageId,
+        __pageId__: (globalThis as any).pageId,
         type: `[[${message.type}]]`
       })
     )
@@ -392,7 +392,7 @@ function messageAddListener<T extends MsgType>(
   this: MessageThis,
   ...args: [T, onMessageEvent<Message<T>>] | [onMessageEvent<Message>]
 ): void {
-  if (window.pageId === undefined) {
+  if ((globalThis as any).pageId === undefined) {
     initClient()
   }
   const allListeners = this.__self__ ? messageSelfListeners : messageListeners
@@ -409,7 +409,7 @@ function messageAddListener<T extends MsgType>(
       if (
         message &&
         (this.__self__
-          ? window.pageId === message.__pageId__
+          ? (globalThis as any).pageId === message.__pageId__
           : !message.__pageId__)
       ) {
         if (messageType == null || message.type === messageType) {
@@ -486,23 +486,37 @@ function messageCreateStream<T extends MsgType>(
  * Deploy page script for self-messaging
  * This method is called on the first sendMessage
  */
-function initClient(): Promise<typeof window.pageId> {
-  if (window.pageId === undefined) {
+function initClient(): Promise<string | number | undefined> {
+  if ((globalThis as any).pageId === undefined) {
     return message
       .send<'PAGE_INFO'>({ type: 'PAGE_INFO' })
-      .then(({ pageId, faviconURL, pageTitle, pageURL }) => {
-        window.pageId = pageId
-        window.faviconURL = faviconURL
+      .then(response => {
+        // Handle case where background service worker isn't ready yet
+        if (!response) {
+          (globalThis as any).pageId = 'unknown'
+          return 'unknown'
+        }
+        const { pageId, faviconURL, pageTitle, pageURL } = response
+        ;(globalThis as any).pageId = pageId
+        ;(globalThis as any).faviconURL = faviconURL
         if (pageTitle) {
-          window.pageTitle = pageTitle
+          ;(globalThis as any).pageTitle = pageTitle
         }
         if (pageURL) {
-          window.pageURL = pageURL
+          ;(globalThis as any).pageURL = pageURL
         }
         return pageId
       })
+      .catch(e => {
+        // Background service worker might not be ready yet
+        if (process.env.DEBUG) {
+          console.warn('PAGE_INFO request failed in initClient:', e)
+        }
+        (globalThis as any).pageId = 'unknown'
+        return 'unknown'
+      })
   } else {
-    return Promise.resolve(window.pageId)
+    return Promise.resolve((globalThis as any).pageId)
   }
 }
 
@@ -511,7 +525,7 @@ function initClient(): Promise<typeof window.pageId> {
  * This method should be invoked in background script
  */
 function initServer(): void {
-  window.pageId = 'background page'
+  ;(globalThis as any).pageId = 'background page'
   const selfMsgTester = /^\[\[(.+)\]\]$/
 
   browser.runtime.onMessage.addListener(

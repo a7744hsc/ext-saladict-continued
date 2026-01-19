@@ -30,6 +30,36 @@ export interface SyncMeta {
   readonly timestamp?: number
 }
 
+// Helper function for base64 encoding that works in service worker
+function encodeBase64(str: string): string {
+  // btoa is available in service workers
+  return btoa(str)
+}
+
+// Simple XML parser for WebDAV responses (DOMParser not available in service worker)
+function parseWebDAVResponse(text: string): { href: string; isCollection: boolean }[] {
+  const results: { href: string; isCollection: boolean }[] = []
+
+  // Simple regex-based parsing for WebDAV PROPFIND responses
+  const responseRegex = /<(?:d:|D:)?response[^>]*>([\s\S]*?)<\/(?:d:|D:)?response>/gi
+  const hrefRegex = /<(?:d:|D:)?href[^>]*>([^<]*)<\/(?:d:|D:)?href>/i
+  const collectionRegex = /<(?:d:|D:)?resourcetype[^>]*>[\s\S]*?<(?:d:|D:)?collection/i
+
+  let match
+  while ((match = responseRegex.exec(text)) !== null) {
+    const responseContent = match[1]
+    const hrefMatch = hrefRegex.exec(responseContent)
+    if (hrefMatch) {
+      results.push({
+        href: hrefMatch[1],
+        isCollection: collectionRegex.test(responseContent)
+      })
+    }
+  }
+
+  return results
+}
+
 export class Service extends SyncService<SyncConfig, SyncMeta> {
   static readonly id = 'webdav'
 
@@ -116,7 +146,7 @@ export class Service extends SyncService<SyncConfig, SyncMeta> {
         method: 'PROPFIND',
         headers: {
           Authorization:
-            'Basic ' + window.btoa(`${this.config.user}:${this.config.passwd}`),
+            'Basic ' + encodeBase64(`${this.config.user}:${this.config.passwd}`),
           'Content-Type': 'application/xml; charset="utf-8"',
           Depth: '1'
         }
@@ -132,26 +162,15 @@ export class Service extends SyncService<SyncConfig, SyncMeta> {
       throw new Error('network')
     }
 
-    let doc: Document | undefined
-    try {
-      if (text) {
-        doc = new DOMParser().parseFromString(text, 'text/xml')
-      }
-    } catch (e) {
+    if (!text) {
       throw new Error('parse')
     }
 
-    if (!doc) {
-      throw new Error('parse')
-    }
+    const responses = parseWebDAVResponse(text)
 
-    const $responses = Array.from(doc.querySelectorAll('response'))
-    for (const i in $responses) {
-      const href = $responses[i].querySelector('href')
-      if (href && href.textContent && href.textContent.endsWith('/Saladict/')) {
-        // is Saladict
-        if ($responses[i].querySelector('resourcetype collection')) {
-          // is collection
+    for (const item of responses) {
+      if (item.href.endsWith('/Saladict/')) {
+        if (item.isCollection) {
           return true
         } else {
           throw new Error('dir')
@@ -174,7 +193,7 @@ export class Service extends SyncService<SyncConfig, SyncMeta> {
         method: 'MKCOL',
         headers: {
           Authorization:
-            'Basic ' + window.btoa(`${this.config.user}:${this.config.passwd}`)
+            'Basic ' + encodeBase64(`${this.config.user}:${this.config.passwd}`)
         }
       })
       if (!response.ok) {
@@ -229,7 +248,7 @@ export class Service extends SyncService<SyncConfig, SyncMeta> {
         method: 'PUT',
         headers: {
           Authorization:
-            'Basic ' + window.btoa(`${this.config.user}:${this.config.passwd}`)
+            'Basic ' + encodeBase64(`${this.config.user}:${this.config.passwd}`)
         },
         body
       })
@@ -262,7 +281,7 @@ export class Service extends SyncService<SyncConfig, SyncMeta> {
     }
 
     const headers: { [name: string]: string } = {
-      Authorization: 'Basic ' + window.btoa(`${config.user}:${config.passwd}`)
+      Authorization: 'Basic ' + encodeBase64(`${config.user}:${config.passwd}`)
     }
     if (!testConfig && !noCache && this.meta.etag != null) {
       headers['If-None-Match'] = this.meta.etag

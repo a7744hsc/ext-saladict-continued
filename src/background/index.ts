@@ -14,8 +14,28 @@ import { initBadge } from './badge'
 import { setupCaiyunTrsBackend } from './page-translate/caiyun'
 import { setupRequestGAListener } from '@/_helpers/analytics'
 import './types'
+import { AppConfig } from '@/app-config'
+import { Profile, ProfileIDList } from '@/app-config/profiles'
 
-// init first to recevice self messaging
+// Global state for service worker (stored in memory, will be lost on worker restart)
+let appConfig: AppConfig | null = null
+let activeProfile: Profile | null = null
+let profileIDList: ProfileIDList | null = null
+
+// Export getters for global state
+export function getAppConfig(): AppConfig | null {
+  return appConfig
+}
+
+export function getActiveProfile(): Profile | null {
+  return activeProfile
+}
+
+export function getProfileIDList(): ProfileIDList | null {
+  return profileIDList
+}
+
+// init first to receive self messaging
 message.self.initServer()
 
 startSyncServiceInterval()
@@ -28,19 +48,19 @@ setupCaiyunTrsBackend()
 setupRequestGAListener()
 
 getConfig().then(async config => {
-  window.appConfig = config
+  appConfig = config
   initPdf(config)
   initBadge()
 
   addConfigListener(({ newConfig }) => {
-    window.appConfig = newConfig
+    appConfig = newConfig
   })
 })
 
 createActiveProfileStream().subscribe(profile => {
-  window.activeProfile = profile
+  activeProfile = profile
 })
 
 createProfileIDListStream().subscribe(list => {
-  window.profileIDList = list
+  profileIDList = list
 })

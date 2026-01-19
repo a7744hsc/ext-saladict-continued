@@ -25,7 +25,9 @@ export async function checkUpdate(
 ): Promise<ReleaseResponse> {
   if (!data) {
     try {
-      const isZh = window.appConfig.langCode.startsWith('zh')
+      // Get langCode from storage since this may be called from service worker
+      const { langCode } = await browser.storage.sync.get('langCode')
+      const isZh = (langCode || 'en').startsWith('zh')
       const response = await fetch(
         `https://saladict.crimx.com/releases/${isZh ? 'chs' : 'eng'}.json`
       )

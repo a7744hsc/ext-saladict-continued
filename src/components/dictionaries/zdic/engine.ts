@@ -23,6 +23,8 @@ export type ZdicResult = Array<{
 
 type ZdicSearchResult = DictSearchResult<ZdicResult>
 
+const ZDIC_REFERER_RULE_ID = 100
+
 let isRefererModified = false
 
 export const search: SearchFunction<ZdicResult> = (
@@ -84,39 +86,42 @@ function handleDOM(
   return response.result.length > 0 ? response : handleNoResult()
 }
 
-function modifyReferer() {
-  const extraInfoSpec = ['blocking', 'requestHeaders']
-  // https://developer.chrome.com/extensions/webRequest#life_cycle_footnote
-  if (
-    browser.webRequest['OnBeforeSendHeadersOptions'] &&
-    Object.prototype.hasOwnProperty.call(
-      browser.webRequest['OnBeforeSendHeadersOptions'],
-      'EXTRA_HEADERS'
-    )
-  ) {
-    extraInfoSpec.push('extraHeaders')
-  }
+async function modifyReferer() {
+  // In MV3, use declarativeNetRequest to modify headers
+  try {
+    // First remove any existing rule with this ID
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: [ZDIC_REFERER_RULE_ID]
+    })
 
-  browser.webRequest.onBeforeSendHeaders.addListener(
-    details => {
-      if (details && details.requestHeaders) {
-        for (var i = 0; i < details.requestHeaders.length; ++i) {
-          if (details.requestHeaders[i].name === 'Referer') {
-            details.requestHeaders[i].value = 'https://www.zdic.net'
-            break
+    // Add the new rule
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      addRules: [
+        {
+          id: ZDIC_REFERER_RULE_ID,
+          priority: 1,
+          action: {
+            type: chrome.declarativeNetRequest.RuleActionType.MODIFY_HEADERS,
+            requestHeaders: [
+              {
+                header: 'Referer',
+                operation: chrome.declarativeNetRequest.HeaderOperation.SET,
+                value: 'https://www.zdic.net'
+              }
+            ]
+          },
+          condition: {
+            urlFilter: 'https://img.zdic.net/audio/*',
+            resourceTypes: [
+              chrome.declarativeNetRequest.ResourceType.MEDIA,
+              chrome.declarativeNetRequest.ResourceType.XMLHTTPREQUEST,
+              chrome.declarativeNetRequest.ResourceType.OTHER
+            ]
           }
         }
-        if (i === details.requestHeaders.length) {
-          details.requestHeaders.push({
-            name: 'Referer',
-            value: 'https://www.zdic.net'
-          })
-        }
-      }
-      return { requestHeaders: details.requestHeaders }
-    },
-    { urls: ['https://img.zdic.net/audio/*'] },
-    /** WebExt type is missing Chrome support */
-    extraInfoSpec as any
-  )
+      ]
+    })
+  } catch (error) {
+    console.warn('Failed to set up declarativeNetRequest rule for zdic:', error)
+  }
 }

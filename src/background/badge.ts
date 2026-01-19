@@ -2,6 +2,28 @@ import { message } from '@/_helpers/browser-api'
 import { Subject } from 'rxjs'
 import { switchMapBy } from '@/_helpers/observables'
 import { timer } from '@/_helpers/promise-more'
+import { getAppConfig } from './index'
+
+// Static imports for locales - dynamic import() doesn't work in service workers
+import { locale as localeEn } from '@/_locales/en/background'
+import { locale as localeZhCN } from '@/_locales/zh-CN/background'
+import { locale as localeZhTW } from '@/_locales/zh-TW/background'
+
+// Locale map for service worker compatibility
+const locales: Record<string, typeof localeEn> = {
+  'en': localeEn,
+  'zh-CN': localeZhCN,
+  'zh-TW': localeZhTW,
+}
+
+function getLocale(langCode: string) {
+  return locales[langCode] || locales['en']
+}
+
+// Use chrome.action for MV3, fallback to chrome.browserAction for MV2
+function getActionAPI() {
+  return chrome.action || (chrome as any).browserAction
+}
 
 interface UpdateBadgeOptions {
   active: boolean
@@ -26,6 +48,7 @@ onUpdated$
         await timer(1000)
       }
 
+      const appConfig = getAppConfig()
       return {
         tabId: o.tabId,
         options: (await message
@@ -33,7 +56,7 @@ onUpdated$
             type: 'GET_TAB_BADGE_INFO'
           })
           .catch(() => {})) || {
-          active: window.appConfig.active,
+          active: appConfig?.active ?? true,
           tempDisable: false,
           unsupported: true
         }
@@ -72,44 +95,60 @@ export function initBadge() {
 }
 
 function setOff(tabId: number) {
+  const appConfig = getAppConfig()
   setIcon(true, tabId)
-  // browser.browserAction.setBadgeBackgroundColor({ color: '#E74C3C', tabId })
-  // browser.browserAction.setBadgeText({ text: 'off', tabId })
-  browser.browserAction.setTitle({
-    title: require('@/_locales/' + window.appConfig.langCode + '/background')
-      .locale.app.off,
-    tabId
-  })
+  const langCode = appConfig?.langCode || 'en'
+  const locale = getLocale(langCode)
+  const actionAPI = getActionAPI()
+  if (actionAPI) {
+    actionAPI.setTitle({
+      title: locale.app.off,
+      tabId
+    })
+  }
 }
 
 function setTempOff(tabId: number) {
+  const appConfig = getAppConfig()
   setIcon(true, tabId)
-  // browser.browserAction.setBadgeBackgroundColor({ color: '#F39C12', tabId })
-  // browser.browserAction.setBadgeText({ text: 'off', tabId })
-  browser.browserAction.setTitle({
-    title: require('@/_locales/' + window.appConfig.langCode + '/background')
-      .locale.app.tempOff,
-    tabId
-  })
+  const langCode = appConfig?.langCode || 'en'
+  const locale = getLocale(langCode)
+  const actionAPI = getActionAPI()
+  if (actionAPI) {
+    actionAPI.setTitle({
+      title: locale.app.tempOff,
+      tabId
+    })
+  }
 }
 
 function setUnsupported(tabId: number) {
+  const appConfig = getAppConfig()
   setIcon(true, tabId)
-  browser.browserAction.setTitle({
-    title: require('@/_locales/' + window.appConfig.langCode + '/background')
-      .locale.app.unsupported,
-    tabId
-  })
+  const langCode = appConfig?.langCode || 'en'
+  const locale = getLocale(langCode)
+  const actionAPI = getActionAPI()
+  if (actionAPI) {
+    actionAPI.setTitle({
+      title: locale.app.unsupported,
+      tabId
+    })
+  }
 }
 
 function setDefault(tabId: number) {
   setIcon(false, tabId)
-  // browser.browserAction.setBadgeText({ text: '', tabId })
-  // browser.browserAction.setTitle({ title: '', tabId })
+  // chrome.action.setBadgeText({ text: '', tabId })
+  // chrome.action.setTitle({ title: '', tabId })
 }
 
 function setIcon(gray: boolean, tabId: number) {
-  browser.browserAction.setIcon({
+  const actionAPI = getActionAPI()
+  if (!actionAPI) {
+    console.warn('Neither chrome.action nor chrome.browserAction available')
+    return
+  }
+  actionAPI.setIcon({
     tabId,
     path: gray
       ? {

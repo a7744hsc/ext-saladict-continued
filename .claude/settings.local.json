@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(export NODE_OPTIONS=--openssl-legacy-provider)",
+      "Bash(npm run build:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(xargs:*)"
+    ]
+  }
+}

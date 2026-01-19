@@ -43,7 +43,7 @@ module.exports = {
       popup: {
         entry: 'popup',
         webext: {
-          type: 'browser_action',
+          type: 'action',
           manifest: {
             default_icon: {
               '16': 'assets/icon-16.png',
@@ -72,8 +72,7 @@ module.exports = {
       background: {
         entry: 'background',
         webext: {
-          type: 'background',
-          setup: 'background/__fake__/env.ts'
+          type: 'background'
         }
       },
 
@@ -95,6 +94,10 @@ module.exports = {
 
       'audio-control': {
         entry: 'audio-control'
+      },
+
+      offscreen: {
+        entry: 'offscreen'
       }
     }
   },
@@ -247,6 +250,9 @@ module.exports = {
       // avoid collision
       neutrino.config.output.jsonpFunction('saladictEntry')
 
+      // Use globalThis instead of window for service worker compatibility (MV3)
+      neutrino.config.output.globalObject('globalThis')
+
       // transform *.shadow.(css|scss) to string
       // this will be injected into shadow-dom style tag
       // prettier-ignore
@@ -326,19 +332,22 @@ module.exports = {
                   react: {
                     test: /[\\/]node_modules[\\/](react|react-dom|i18next)[\\/]/,
                     name: 'view-vendor',
-                    chunks: 'all',
+                    // Exclude background from code splitting - service workers can't load dynamic chunks
+                    chunks: (chunk) => chunk.name !== 'background' && chunk.name !== 'offscreen',
                     priority: 100
                   },
                   franc: {
                     test: /[\\/]node_modules[\\/]franc/,
                     name: 'franc',
-                    chunks: 'all',
+                    // Exclude background from code splitting
+                    chunks: (chunk) => chunk.name !== 'background' && chunk.name !== 'offscreen',
                     priority: 100
                   },
                   dexie: {
                     test: /[\\/]node_modules[\\/]dexie/,
                     name: 'dexie',
-                    chunks: 'all',
+                    // Exclude background from code splitting
+                    chunks: (chunk) => chunk.name !== 'background' && chunk.name !== 'offscreen',
                     priority: 100
                   },
                   wordpage: {

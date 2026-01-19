@@ -1,15 +1,19 @@
 /** Pages with the Saladict extension domain */
-export const isBackgroundPage = () => !!window.__SALADICT_BACKGROUND_PAGE__
+export const isBackgroundPage = () =>
+  !!(globalThis as any).__SALADICT_BACKGROUND_PAGE__
 
-export const isInternalPage = () => !!window.__SALADICT_INTERNAL_PAGE__
+export const isInternalPage = () =>
+  !!(globalThis as any).__SALADICT_INTERNAL_PAGE__
 
-export const isOptionsPage = () => !!window.__SALADICT_OPTIONS_PAGE__
+export const isOptionsPage = () =>
+  !!(globalThis as any).__SALADICT_OPTIONS_PAGE__
 
-export const isPopupPage = () => !!window.__SALADICT_POPUP_PAGE__
+export const isPopupPage = () => !!(globalThis as any).__SALADICT_POPUP_PAGE__
 
-export const isPDFPage = () => !!window.__SALADICT_PDF_PAGE__
+export const isPDFPage = () => !!(globalThis as any).__SALADICT_PDF_PAGE__
 
-export const isQuickSearchPage = () => !!window.__SALADICT_QUICK_SEARCH_PAGE__
+export const isQuickSearchPage = () =>
+  !!(globalThis as any).__SALADICT_QUICK_SEARCH_PAGE__
 
 /** Dict panel is in a standalone window */
 export const isStandalonePage = () => isPopupPage() || isQuickSearchPage()
@@ -22,9 +26,13 @@ export const SALADICT_EXTERNAL = 'saladict-external'
 
 export const SALADICT_PANEL = 'saladict-panel'
 
-export const isFirefox = navigator.userAgent.includes('Firefox')
-export const isOpera = navigator.userAgent.includes('OPR')
-export const isSafari = /apple/i.test(navigator.vendor)
+// These checks are safe for both window and service worker contexts
+export const isFirefox =
+  typeof navigator !== 'undefined' && navigator.userAgent?.includes('Firefox')
+export const isOpera =
+  typeof navigator !== 'undefined' && navigator.userAgent?.includes('OPR')
+export const isSafari =
+  typeof navigator !== 'undefined' && /apple/i.test(navigator.vendor || '')
 
 /**
  * Is element in a Saladict external element

@@ -1,8 +1,40 @@
-import { timer } from '@/_helpers/promise-more'
-
 /**
  * To make sure only one audio plays at a time
+ * Uses offscreen document for audio playback in MV3 service worker
  */
+
+let creatingOffscreen: Promise<void> | null = null
+
+async function setupOffscreenDocument(): Promise<void> {
+  const offscreenUrl = chrome.runtime.getURL('offscreen.html')
+
+  // Check if offscreen document already exists
+  const existingContexts = await chrome.runtime.getContexts({
+    contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
+    documentUrls: [offscreenUrl]
+  })
+
+  if (existingContexts.length > 0) {
+    return
+  }
+
+  // Create offscreen document if it doesn't exist
+  if (creatingOffscreen) {
+    await creatingOffscreen
+  } else {
+    creatingOffscreen = chrome.offscreen.createDocument({
+      url: 'offscreen.html',
+      reasons: [
+        chrome.offscreen.Reason.AUDIO_PLAYBACK,
+        chrome.offscreen.Reason.CLIPBOARD
+      ],
+      justification: 'Audio playback and clipboard access for dictionary lookups'
+    })
+    await creatingOffscreen
+    creatingOffscreen = null
+  }
+}
+
 export class AudioManager {
   private static instance: AudioManager
 
@@ -14,24 +46,16 @@ export class AudioManager {
   // eslint-disable-next-line no-useless-constructor
   private constructor() {}
 
-  private audio?: HTMLAudioElement
-
   currentSrc?: string
 
   reset() {
-    if (this.audio) {
-      this.audio.pause()
-      this.audio.currentTime = 0
-      this.audio.src = ''
-      this.audio.onended = null
-    }
+    setupOffscreenDocument().then(() => {
+      chrome.runtime.sendMessage({
+        target: 'offscreen',
+        type: 'OFFSCREEN_STOP_AUDIO'
+      })
+    })
     this.currentSrc = ''
-  }
-
-  load(src: string): HTMLAudioElement {
-    this.reset()
-    this.currentSrc = src
-    return (this.audio = new Audio(src))
   }
 
   async play(src?: string): Promise<void> {
@@ -40,18 +64,14 @@ export class AudioManager {
       return
     }
 
-    const audio = this.load(src)
-
-    const onEnd = Promise.race([
-      new Promise(resolve => {
-        audio.onended = resolve
-      }),
-      timer(20000)
-    ])
-
-    await audio.play()
-    await onEnd
-
+    this.currentSrc = src
+    await setupOffscreenDocument()
+    await chrome.runtime.sendMessage({
+      target: 'offscreen',
+      type: 'OFFSCREEN_PLAY_AUDIO',
+      payload: src
+    })
     this.currentSrc = ''
   }
 }
+
