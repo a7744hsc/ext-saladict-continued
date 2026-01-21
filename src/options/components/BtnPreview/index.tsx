@@ -16,7 +16,7 @@ import './_style.scss'
 const pWordOfTheDay = getWordOfTheDay()
 
 export const BtnPreview: FC = () => {
-  const { t } = useTranslate('options')
+  const { t, ready } = useTranslate('options')
   const show = !useIsShowDictPanel()
   const dispatch = useDispatch<Dispatch<StoreAction>>()
 
@@ -32,7 +32,7 @@ export const BtnPreview: FC = () => {
       <div>
         <Button
           className="btn-preview"
-          title={t('previewPanel')}
+          title={ready ? t('previewPanel') : ''}
           shape="circle"
           size="large"
           icon={<PreviewIcon />}

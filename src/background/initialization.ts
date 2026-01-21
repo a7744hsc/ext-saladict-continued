@@ -21,16 +21,19 @@ import './types'
 
 // Handle WTW_INJECT messages from webpack runtime for dynamic chunk loading
 // This allows content scripts to load additional chunks on demand
-browser.runtime.onMessage.addListener((message, sender) => {
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message && message.type === 'WTW_INJECT' && message.file && sender.tab?.id) {
     // Inject the requested script file into the tab
     chrome.scripting.executeScript({
       target: { tabId: sender.tab.id },
       files: [message.file]
+    }).then(() => {
+      sendResponse({ success: true })
     }).catch(err => {
       console.warn('WTW_INJECT failed:', err)
+      sendResponse({ success: false, error: err.message })
     })
-    return true
+    return true // Keep the message channel open for async response
   }
 })
 

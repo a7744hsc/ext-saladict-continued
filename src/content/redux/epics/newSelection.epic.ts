@@ -10,7 +10,7 @@ export const newSelectionEpic: Epic = (action$, state$) =>
     ofType('NEW_SELECTION'),
     // Selection may be skipped in state, use payload instead.
     switchMap(({ payload: selection }) => {
-      const { config, withQssaPanel, isShowDictPanel, isPinned } = state$.value
+      const { config, withQssaPanel, isShowDictPanel, isPinned, isTempDisabled } = state$.value
 
       if (selection.self) {
         // Selection inside dict panel.
@@ -30,10 +30,27 @@ export const newSelectionEpic: Epic = (action$, state$) =>
         return EMPTY
       }
 
-      const { pinMode } = config
+      const { pinMode, mode } = config
+      const isActive = config.active && !isTempDisabled
+
+      // Check if panel is already showing OR will be shown by this selection
+      // This mirrors the logic in action-handlers/new-selection.ts
+      const willShowPanel =
+        isPinned ||
+        (isActive &&
+          selection.word &&
+          selection.word.text &&
+          (isShowDictPanel ||
+            mode.direct ||
+            (mode.double && selection.dbClick) ||
+            (mode.holding.alt && selection.altKey) ||
+            (mode.holding.shift && selection.shiftKey) ||
+            (mode.holding.ctrl && selection.ctrlKey) ||
+            (mode.holding.meta && selection.metaKey) ||
+            selection.instant))
 
       if (
-        isShowDictPanel &&
+        willShowPanel &&
         selection.word &&
         selection.word.text &&
         (!isPinned ||
@@ -44,7 +61,7 @@ export const newSelectionEpic: Epic = (action$, state$) =>
           (pinMode.holding.ctrl && selection.ctrlKey) ||
           (pinMode.holding.meta && selection.metaKey))
       ) {
-        // continue searching
+        // Start or continue searching
         return of<StoreAction>({
           type: 'SEARCH_START',
           payload: { word: selection.word }

@@ -39,7 +39,7 @@ export const Header: FC<HeaderProps> = props => {
     <Layout.Header>
       <div className="options-header">
         <div className="options-header-title">
-          <h1>{t('title')}</h1>
+          <h1>{ready ? t('title') : ''}</h1>
           <span>{version}</span>
         </div>
         <a

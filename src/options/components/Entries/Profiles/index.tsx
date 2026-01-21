@@ -21,7 +21,7 @@ import { useCheckDictAuth } from '@/options/helpers/use-check-dict-auth'
 import { EditNameModal } from './EditNameModal'
 
 export const Profiles: FC = () => {
-  const { t } = useTranslate('options')
+  const { t, ready } = useTranslate('options')
   const checkDictAuth = useCheckDictAuth()
   const activeProfileID = useSelector(state => state.activeProfile.id)
   const [showAddProfileModal, setShowAddProfileModal] = useState(false)
@@ -39,6 +39,8 @@ export const Profiles: FC = () => {
   useLayoutEffect(() => {
     setProfileIDList(storeProfileIDList)
   }, [storeProfileIDList])
+
+  if (!ready) return null
 
   const tryTo = async (action: () => any): Promise<void> => {
     try {

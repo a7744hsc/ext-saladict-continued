@@ -409,7 +409,10 @@ function messageAddListener<T extends MsgType>(
       if (
         message &&
         (this.__self__
-          ? (globalThis as any).pageId === message.__pageId__
+          ? // For self messages, check pageId matches OR pageId is not yet initialized
+            // This handles the race condition where initClient() hasn't completed yet
+            (globalThis as any).pageId === undefined ||
+            (globalThis as any).pageId === message.__pageId__
           : !message.__pageId__)
       ) {
         if (messageType == null || message.type === messageType) {

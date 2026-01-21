@@ -6,7 +6,17 @@
       "Bash(npm run build:*)",
       "Bash(grep:*)",
       "Bash(ls:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(tree:*)",
+      "Bash(cat:*)",
+      "Bash(done)",
+      "Bash(find:*)",
+      "Bash(npm run type-check:*)",
+      "Bash(npm run test)",
+      "Bash(npm run devbuild:*)",
+      "Bash(yarn build)",
+      "Bash(cmd /c \"set NODE_OPTIONS=--openssl-legacy-provider && yarn build\")",
+      "Bash($env:NODE_OPTIONS=\"--openssl-legacy-provider\")"
     ]
   }
 }

@@ -33,8 +33,9 @@ export interface EntrySideBarProps {
 }
 
 export const EntrySideBar: FC<EntrySideBarProps> = props => {
-  const { t } = useTranslate('options')
+  const { t, ready } = useTranslate('options')
   const formDirtyRef = useFormDirty()
+
   // trigger affix rerendering on collapse state changes to update width
   const [affixKey, onCollapse] = useObservableState<number, boolean>(event$ =>
     event$.pipe(
@@ -44,6 +45,8 @@ export const EntrySideBar: FC<EntrySideBarProps> = props => {
     )
   )
   const [affixed, setAffixed] = useState<boolean>()
+
+  if (!ready) return null
 
   return (
     <Affix key={affixKey} onChange={setAffixed}>

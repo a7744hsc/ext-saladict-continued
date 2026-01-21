@@ -77,14 +77,16 @@ export async function i18nLoader(): Promise<i18n.i18n> {
             return syncLocales
           }
 
-          const { locale } = await import(
-            /* webpackInclude: /_locales\/[^/]+\/[^/]+\.ts$/ */
-            /* webpackMode: "lazy" */
-            `@/_locales/${lang}/${ns}.ts`
-          )
-          cb(null, locale)
-          return locale
+          // Use require.context for static bundling (works in all contexts including service workers)
+          const localeModule = loadLocaleModule(lang, ns)
+          if (localeModule) {
+            cb(null, localeModule)
+            return localeModule
+          }
+
+          cb(new Error(`Locale not found: ${lang}/${ns}`))
         } catch (err) {
+          console.error('[i18n backend] error loading', { lang, ns, err })
           cb(err)
         }
       }
@@ -135,6 +137,9 @@ export const I18nContextProvider: FC = ({ children }) => {
         setLang(i18n.language)
         i18n.on('languageChanged', setLangCallback)
       })
+    } else {
+      setLang(i18n.language)
+      i18n.on('languageChanged', setLangCallback)
     }
 
     return () => {
@@ -194,7 +199,7 @@ export function useTranslate(
   }
 
   const [result, setResult] = useState<UseTranslateResult>(() => {
-    if (!lang) {
+    if (!lang || !i18n.language) {
       return genResult(defaultT, false)
     }
 
@@ -218,11 +223,11 @@ export function useTranslate(
 
     if (lang) {
       if (namespaces) {
-        if (
-          Array.isArray(namespaces)
-            ? namespaces.every(ns => i18n.hasResourceBundle(lang, ns))
-            : i18n.hasResourceBundle(lang, namespaces)
-        ) {
+        const hasBundle = Array.isArray(namespaces)
+          ? namespaces.every(ns => i18n.hasResourceBundle(lang, ns))
+          : i18n.hasResourceBundle(lang, namespaces)
+
+        if (hasBundle) {
           setResult(genResult(i18n.getFixedT(lang, namespaces), true))
         } else {
           // keep the old t while marking not ready
@@ -275,6 +280,23 @@ export const Trans = React.memo<PropsWithChildren<{ message?: string }>>(
     )
   }
 )
+
+// Use require.context to statically bundle all locale files
+// This works in all contexts including service workers
+const localeContext = require.context(
+  '@/_locales',
+  true,
+  /^\.\/[^/]+\/[^/]+\.ts$/
+)
+
+function loadLocaleModule(lang: LangCode, ns: Namespace): object | null {
+  const key = `./${lang}/${ns}.ts`
+  if (localeContext.keys().includes(key)) {
+    const module = localeContext(key)
+    return module.locale || module
+  }
+  return null
+}
 
 function extractDictLocales(lang: LangCode) {
   const req = require.context(
