@@ -6,6 +6,14 @@
 
 import * as cheerio from 'cheerio'
 
+// classList-like interface for DOM compatibility
+interface DOMClassList {
+  add(...tokens: string[]): void
+  remove(...tokens: string[]): void
+  contains(token: string): boolean
+  toggle(token: string, force?: boolean): boolean
+}
+
 // Type for our DOM-like wrapper
 interface DOMElement {
   tagName: string
@@ -13,6 +21,7 @@ interface DOMElement {
   innerHTML: string
   outerHTML: string
   className: string
+  classList: DOMClassList
   id: string
   dataset: Record<string, string | undefined>
   parentNode: DOMElement | null
@@ -103,6 +112,45 @@ function wrapElement($: CheerioAPI, el: cheerio.Element): DOMElement {
     set className(value: string) {
       $el.attr('class', value)
     },
+    get classList(): DOMClassList {
+      return {
+        add: (...tokens: string[]) => {
+          const classes = new Set(($el.attr('class') || '').split(/\s+/).filter(Boolean))
+          tokens.forEach(t => classes.add(t))
+          $el.attr('class', Array.from(classes).join(' '))
+        },
+        remove: (...tokens: string[]) => {
+          const classes = new Set(($el.attr('class') || '').split(/\s+/).filter(Boolean))
+          tokens.forEach(t => classes.delete(t))
+          $el.attr('class', Array.from(classes).join(' '))
+        },
+        contains: (token: string): boolean => {
+          return ($el.attr('class') || '').split(/\s+/).includes(token)
+        },
+        toggle: (token: string, force?: boolean): boolean => {
+          const currentClasses = ($el.attr('class') || '').split(/\s+/).filter(Boolean)
+          const has = currentClasses.includes(token)
+          if (force === undefined) {
+            if (has) {
+              $el.attr('class', currentClasses.filter(c => c !== token).join(' '))
+              return false
+            } else {
+              $el.attr('class', [...currentClasses, token].join(' '))
+              return true
+            }
+          }
+          if (force) {
+            if (!has) {
+              $el.attr('class', [...currentClasses, token].join(' '))
+            }
+            return true
+          } else {
+            $el.attr('class', currentClasses.filter(c => c !== token).join(' '))
+            return false
+          }
+        }
+      }
+    },
     get id() {
       return $el.attr('id') || ''
     },
@@ -173,7 +221,9 @@ function wrapElement($: CheerioAPI, el: cheerio.Element): DOMElement {
     querySelectorAll(selector: string): DOMElement[] {
       const results: DOMElement[] = []
       $el.find(selector).each((_, elem) => {
-        results.push(wrapElement($, elem))
+        if (elem && (elem as cheerio.TagElement).tagName) {
+          results.push(wrapElement($, elem))
+        }
       })
       return results
     },
@@ -236,21 +286,27 @@ function wrapDocument($: CheerioAPI): DOMDocument {
     querySelectorAll(selector: string): DOMElement[] {
       const results: DOMElement[] = []
       $(selector).each((_, elem) => {
-        results.push(wrapElement($, elem))
+        if (elem && (elem as cheerio.TagElement).tagName) {
+          results.push(wrapElement($, elem))
+        }
       })
       return results
     },
     getElementsByTagName(tagName: string): DOMElement[] {
       const results: DOMElement[] = []
       $(tagName).each((_, elem) => {
-        results.push(wrapElement($, elem))
+        if (elem && (elem as cheerio.TagElement).tagName) {
+          results.push(wrapElement($, elem))
+        }
       })
       return results
     },
     getElementsByClassName(className: string): DOMElement[] {
       const results: DOMElement[] = []
       $('.' + className.split(' ').join('.')).each((_, elem) => {
-        results.push(wrapElement($, elem))
+        if (elem && (elem as cheerio.TagElement).tagName) {
+          results.push(wrapElement($, elem))
+        }
       })
       return results
     },
@@ -267,12 +323,19 @@ function wrapDocument($: CheerioAPI): DOMDocument {
     createTextNode(text: string): DOMElement {
       // Create a text node - cheerio doesn't have true text nodes,
       // so we create a wrapper that behaves like one
+      const noopClassList: DOMClassList = {
+        add: () => {},
+        remove: () => {},
+        contains: () => false,
+        toggle: () => false
+      }
       const textNode = {
         tagName: '',
         textContent: text,
         innerHTML: text,
         outerHTML: text,
         className: '',
+        classList: noopClassList,
         id: '',
         dataset: {},
         parentNode: null,

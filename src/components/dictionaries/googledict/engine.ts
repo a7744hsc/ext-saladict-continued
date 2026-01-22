@@ -13,6 +13,7 @@ import {
 } from '../helpers'
 import { getStaticSpeaker } from '@/components/Speaker'
 import { fetchPlainText, parseHTML } from '@/_helpers/fetch-dom-sw'
+import axios from 'axios'
 
 export const getSrcPage: GetSrcPageFunction = text => {
   return (
@@ -28,6 +29,136 @@ export interface GoogleDictResult {
 
 type GoogleDictSearchResult = DictSearchResult<GoogleDictResult>
 
+// Free Dictionary API response types
+interface FreeDictPhonetic {
+  text?: string
+  audio?: string
+}
+
+interface FreeDictDefinition {
+  definition: string
+  example?: string
+  synonyms?: string[]
+  antonyms?: string[]
+}
+
+interface FreeDictMeaning {
+  partOfSpeech: string
+  definitions: FreeDictDefinition[]
+  synonyms?: string[]
+  antonyms?: string[]
+}
+
+interface FreeDictEntry {
+  word: string
+  phonetics: FreeDictPhonetic[]
+  meanings: FreeDictMeaning[]
+}
+
+/**
+ * Convert Free Dictionary API response to HTML format
+ * This is used as a fallback when Google Dictionary fails
+ */
+function convertFreeDictToHTML(entries: FreeDictEntry[]): GoogleDictResult {
+  const entry = entries[0]
+  if (!entry) {
+    throw new Error('NO_RESULT')
+  }
+
+  let html = '<div class="lr_container fallback-dict">'
+
+  // Word and phonetics
+  html += `<div class="vkc_np"><div class="headword">${entry.word}</div>`
+
+  // Phonetics
+  const phonetic = entry.phonetics.find(p => p.text) || entry.phonetics[0]
+  if (phonetic?.text) {
+    html += `<div class="phonetic">${phonetic.text}</div>`
+  }
+  html += '</div>'
+
+  // Meanings
+  entry.meanings.forEach(meaning => {
+    html += `<div class="vkc_np meaning-block">`
+    html += `<div class="pos"><i>${meaning.partOfSpeech}</i></div>`
+    html += '<ol class="definitions">'
+
+    meaning.definitions.slice(0, 5).forEach(def => {
+      html += '<li class="definition">'
+      html += `<div class="def-text">${def.definition}</div>`
+      if (def.example) {
+        html += `<div class="example">"${def.example}"</div>`
+      }
+      html += '</li>'
+    })
+
+    html += '</ol>'
+
+    // Synonyms
+    if (meaning.synonyms && meaning.synonyms.length > 0) {
+      html += `<div class="synonyms"><strong>syn:</strong> ${meaning.synonyms.slice(0, 5).join(', ')}</div>`
+    }
+
+    // Antonyms
+    if (meaning.antonyms && meaning.antonyms.length > 0) {
+      html += `<div class="antonyms"><strong>ant:</strong> ${meaning.antonyms.slice(0, 5).join(', ')}</div>`
+    }
+
+    html += '</div>'
+  })
+
+  html += '</div>'
+
+  // Basic styles for the fallback dictionary
+  const styles = [`
+    .fallback-dict { font-family: Arial, sans-serif; padding: 10px; }
+    .fallback-dict .headword { font-size: 1.5em; font-weight: bold; margin-bottom: 5px; }
+    .fallback-dict .phonetic { color: #666; margin-bottom: 10px; }
+    .fallback-dict .meaning-block { margin-bottom: 15px; }
+    .fallback-dict .pos { color: #1a73e8; margin-bottom: 5px; }
+    .fallback-dict .definitions { margin: 0; padding-left: 20px; }
+    .fallback-dict .definition { margin-bottom: 8px; }
+    .fallback-dict .def-text { margin-bottom: 3px; }
+    .fallback-dict .example { color: #666; font-style: italic; margin-left: 10px; }
+    .fallback-dict .synonyms, .fallback-dict .antonyms { color: #666; font-size: 0.9em; margin-top: 5px; }
+  `]
+
+  return { entry: html, styles }
+}
+
+/**
+ * Fallback to Free Dictionary API when Google Dictionary fails
+ */
+async function fetchFromFreeDictAPI(text: string): Promise<GoogleDictSearchResult> {
+  try {
+    const response = await axios.get<FreeDictEntry[]>(
+      `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(text)}`,
+      { timeout: 10000 }
+    )
+
+    if (response.data && response.data.length > 0) {
+      const result = convertFreeDictToHTML(response.data)
+
+      // Add audio if available
+      const audioEntry = response.data[0].phonetics.find(p => p.audio)
+      if (audioEntry?.audio) {
+        return {
+          result,
+          audio: {
+            us: audioEntry.audio
+          }
+        }
+      }
+
+      return { result }
+    }
+  } catch (e) {
+    // Free Dictionary API failed, return no result
+  }
+
+  return handleNoResult<GoogleDictSearchResult>()
+}
+
 export const search: SearchFunction<GoogleDictResult> = async (
   text,
   config,
@@ -42,19 +173,39 @@ export const search: SearchFunction<GoogleDictResult> = async (
     text.toLowerCase().replace(/\s+/g, '+')
   )
 
+  // Try Google first, then fallback to Free Dictionary API
   try {
-    return await fetchPlainText(
+    const googleResult = await fetchPlainText(
       `https://www.google.com/search?hl=en&safe=off&${isen}q=meaning:${encodedText}`
     )
       .catch(handleNetWorkError)
       .then(handleDOM)
+
+    // If Google returns a valid result, use it
+    if (googleResult.result) {
+      return googleResult
+    }
   } catch (e) {
-    return await fetchPlainText(
+    // Google search failed, will try fallback
+  }
+
+  // Try define: query
+  try {
+    const googleResult = await fetchPlainText(
       `https://www.google.com/search?hl=en&safe=off&${isen}q=define:${encodedText}`
     )
       .catch(handleNetWorkError)
       .then(handleDOM)
+
+    if (googleResult.result) {
+      return googleResult
+    }
+  } catch (e) {
+    // Google define: search failed, will try fallback
   }
+
+  // Fallback to Free Dictionary API
+  return fetchFromFreeDictAPI(text)
 
   function handleDOM(
     bodyText: string
@@ -73,6 +224,8 @@ export const search: SearchFunction<GoogleDictResult> = async (
       }
     })
 
+    // Note: Google may have changed their page structure.
+    // If lr_container is not found, the dictionary result parsing will fail.
     const $obcontainer = doc.querySelector('.lr_container')
     if ($obcontainer) {
       $obcontainer
@@ -165,7 +318,8 @@ export const search: SearchFunction<GoogleDictResult> = async (
       return { result: { entry: cleanText, styles } }
     }
 
-    return handleNoResult<GoogleDictSearchResult>()
+    // Return empty result instead of throwing, so we can fallback
+    return { result: undefined as any }
   }
 }
 
