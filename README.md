@@ -1,3 +1,5 @@
+### 我本想修复并将该插件发布到Chrome，修复已经基本完成，但是我发现Chrome上已经有了一个同名工具，虽然闭源，但也免费好用，计划暂停。除非该工具后续收费！
+
 # Saladict 沙拉查词
 
 [![Version](https://img.shields.io/github/release/crimx/ext-saladict.svg?label=version)](https://github.com/crimx/ext-saladict/releases)
