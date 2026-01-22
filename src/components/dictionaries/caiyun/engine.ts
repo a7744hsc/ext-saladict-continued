@@ -1,7 +1,6 @@
 import { SearchFunction, GetSrcPageFunction } from '../helpers'
 import memoizeOne from 'memoize-one'
 import { Caiyun } from '@opentranslate/caiyun'
-import { TranslateResult } from '@opentranslate/translator'
 import {
   MachineTranslateResult,
   MachineTranslatePayload,
@@ -46,29 +45,43 @@ export const search: SearchFunction<
 
   const baiduTranslator = getBaiduTranslator()
 
-  let baiduResult: TranslateResult | undefined
+  // Only use Baidu for language detection if user has configured Baidu API
+  const baiduAppid = config.dictAuth.baidu.appid
+  const baiduKey = config.dictAuth.baidu.key
+  const hasBaiduCredentials = !!(baiduAppid && baiduKey)
 
-  try {
-    // Caiyun's lang detection is broken
-    baiduResult = await baiduTranslator.translate(text, sl, tl)
-    if (langcodes.includes(baiduResult.from)) {
-      sl = baiduResult.from
-    }
-  } catch (e) {}
+  if (hasBaiduCredentials) {
+    try {
+      // Caiyun's lang detection is broken
+      const baiduResult = await baiduTranslator.translate(text, sl, tl, {
+        appid: baiduAppid,
+        key: baiduKey
+      })
+      if (langcodes.includes(baiduResult.from)) {
+        sl = baiduResult.from
+      }
+    } catch (e) {}
+  }
 
   const caiYunToken = config.dictAuth.caiyun.token
   const caiYunConfig = caiYunToken ? { token: caiYunToken } : undefined
 
   try {
     const result = await translator.translate(text, sl, tl, caiYunConfig)
-    result.origin.tts = await baiduTranslator.textToSpeech(
-      result.origin.paragraphs.join('\n'),
-      result.from
-    )
-    result.trans.tts = await baiduTranslator.textToSpeech(
-      result.trans.paragraphs.join('\n'),
-      result.to
-    )
+
+    // Only use Baidu TTS if user has configured Baidu API
+    if (hasBaiduCredentials) {
+      try {
+        result.origin.tts = await baiduTranslator.textToSpeech(
+          result.origin.paragraphs.join('\n'),
+          result.from
+        )
+        result.trans.tts = await baiduTranslator.textToSpeech(
+          result.trans.paragraphs.join('\n'),
+          result.to
+        )
+      } catch (e) {}
+    }
     return machineResult(
       {
         result: {

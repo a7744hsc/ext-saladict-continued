@@ -60,8 +60,6 @@ export class BackgroundServer {
     this.qsPanelManager = new QsPanelManager()
 
     message.addListener((msg, sender: browser.runtime.MessageSender) => {
-      console.log('[SALADICT] Message received:', msg.type, msg)
-
       switch (msg.type) {
         case 'OPEN_DICT_SRC_PAGE':
           return this.openSrcPage(msg.payload)
@@ -73,7 +71,6 @@ export class BackgroundServer {
           AudioManager.getInstance().reset()
           return Promise.resolve() // Must return a Promise to prevent port closure
         case 'FETCH_DICT_RESULT':
-          console.log('[SALADICT] Handling FETCH_DICT_RESULT')
           return this.fetchDictResult(msg.payload)
         case 'DICT_ENGINE_METHOD':
           return this.callDictEngineMethod(msg.payload)
@@ -118,7 +115,6 @@ export class BackgroundServer {
         default:
           // Return undefined for unhandled messages - let other listeners handle them
           // This is important: returning undefined allows other message handlers to process
-          console.log('[SALADICT] Unhandled message type in BackgroundServer:', msg.type)
           return undefined
       }
     })
@@ -200,16 +196,9 @@ export class BackgroundServer {
   async fetchDictResult(
     data: Message<'FETCH_DICT_RESULT'>['payload']
   ): Promise<MessageResponse<'FETCH_DICT_RESULT'>> {
-    console.log('[SALADICT] fetchDictResult called:', data)
-
     const payload = data.payload || {}
     const appConfig = getAppConfig()
     const activeProfile = getActiveProfile()
-
-    console.log('[SALADICT] config loaded:', {
-      hasAppConfig: !!appConfig,
-      hasActiveProfile: !!activeProfile
-    })
 
     let response: DictSearchResult<any> | undefined
 
@@ -218,16 +207,12 @@ export class BackgroundServer {
         NonNullable<typeof data['payload']>
       >(data.id)
 
-      console.log('[SALADICT] engine loaded, calling search...')
-
       try {
         response = await timeout(
           search(data.text, appConfig!, activeProfile!, payload),
           25000
         )
-        console.log('[SALADICT] search response:', response)
       } catch (e) {
-        console.warn('[SALADICT] search inner error:', e)
         if (e.message === 'NETWORK_ERROR') {
           // retry once
           await timer(500)
@@ -240,8 +225,9 @@ export class BackgroundServer {
         }
       }
     } catch (e) {
-      // Always log errors for debugging
-      console.warn('[SALADICT]', data.id, 'search error:', e)
+      if (process.env.DEBUG) {
+        console.warn(data.id, 'search error:', e)
+      }
     }
 
     const result = response

@@ -79,16 +79,22 @@ export const search: SearchFunction<
     const result = await translator.translate(text, sl, tl, translatorConfig)
     // Tencent needs extra api credits for TTS which does
     // not fit in the current Saladict architecture.
-    // Use Baidu instead.
-    const baidu = getBaiduTranslator()
-    result.origin.tts = await baidu.textToSpeech(
-      result.origin.paragraphs.join('\n'),
-      result.from
-    )
-    result.trans.tts = await baidu.textToSpeech(
-      result.trans.paragraphs.join('\n'),
-      result.to
-    )
+    // Use Baidu instead if user has configured Baidu API.
+    const baiduAppid = config.dictAuth.baidu.appid
+    const baiduKey = config.dictAuth.baidu.key
+    if (baiduAppid && baiduKey) {
+      try {
+        const baidu = getBaiduTranslator()
+        result.origin.tts = await baidu.textToSpeech(
+          result.origin.paragraphs.join('\n'),
+          result.from
+        )
+        result.trans.tts = await baidu.textToSpeech(
+          result.trans.paragraphs.join('\n'),
+          result.to
+        )
+      } catch (e) {}
+    }
 
     return machineResult(
       {

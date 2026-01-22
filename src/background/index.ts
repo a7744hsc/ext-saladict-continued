@@ -17,8 +17,6 @@ import './types'
 import { AppConfig } from '@/app-config'
 import { Profile, ProfileIDList } from '@/app-config/profiles'
 
-console.log('[SALADICT] Background script starting...')
-
 // Global state for service worker (stored in memory, will be lost on worker restart)
 let appConfig: AppConfig | null = null
 let activeProfile: Profile | null = null
@@ -40,14 +38,10 @@ export function getProfileIDList(): ProfileIDList | null {
 // init first to receive self messaging
 message.self.initServer()
 
-console.log('[SALADICT] initServer done')
-
 startSyncServiceInterval()
 
 ContextMenus.init()
 BackgroundServer.init()
-
-console.log('[SALADICT] BackgroundServer initialized')
 
 setupCaiyunTrsBackend()
 

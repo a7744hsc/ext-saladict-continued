@@ -56,6 +56,23 @@ export const search: SearchFunction<
   const key = config.dictAuth.baidu.key
   const translatorConfig = appid && key ? { appid, key } : undefined
 
+  if (!translatorConfig) {
+    return machineResult(
+      {
+        result: {
+          requireCredential: true,
+          id: 'baidu',
+          sl: 'auto',
+          tl: 'auto',
+          slInitial: 'hide',
+          searchText: { paragraphs: [''] },
+          trans: { paragraphs: [''] }
+        }
+      },
+      []
+    )
+  }
+
   try {
     const result = await translator.translate(text, sl, tl, translatorConfig)
     return machineResult(
