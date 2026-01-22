@@ -10,6 +10,13 @@ import { Word } from '@/_helpers/record-manager'
 import { isTagName } from '@/_helpers/dom'
 import { isInternalPage } from '@/_helpers/saladict'
 
+// Detect if running in Service Worker (no window/document)
+const isServiceWorker =
+  typeof window === 'undefined' ||
+  typeof document === 'undefined' ||
+  (typeof self !== 'undefined' &&
+    typeof (self as any).ServiceWorkerGlobalScope !== 'undefined')
+
 /** Fetch and parse dictionary search result */
 export interface SearchFunction<Result, Payload = {}> {
   (
@@ -192,7 +199,8 @@ export function getHTML(
       if (el.getAttribute('src')) {
         el.setAttribute('src', getFullLink(host!, el, 'src'))
       }
-      if (isInternalPage() && el.getAttribute('srcset')) {
+      // isInternalPage() uses window.location, skip in Service Worker
+      if (!isServiceWorker && isInternalPage() && el.getAttribute('srcset')) {
         el.setAttribute(
           'srcset',
           el
@@ -209,12 +217,18 @@ export function getHTML(
     node.querySelectorAll('img').forEach(fillLink)
   }
 
-  const fragment = DOMPurify.sanitize(node, {
-    ...config,
-    RETURN_DOM_FRAGMENT: true
-  })
-
-  const content = fragment.firstChild ? fragment.firstChild[mode] : ''
+  // In Service Worker, DOMPurify doesn't work (needs real DOM).
+  // Skip sanitization - HTML is from trusted dictionary sources.
+  let content: string
+  if (isServiceWorker) {
+    content = (node as any)[mode] || ''
+  } else {
+    const fragment = DOMPurify.sanitize(node, {
+      ...config,
+      RETURN_DOM_FRAGMENT: true
+    })
+    content = fragment.firstChild ? (fragment.firstChild as any)[mode] : ''
+  }
 
   return transform ? transform(content) : content
 }
