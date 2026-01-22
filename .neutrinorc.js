@@ -319,6 +319,38 @@ module.exports = {
           }])
       /* eslint-enable indent */
 
+      // Note: We don't use ProvidePlugin for global/Buffer here because:
+      // 1. Browser pages (popup, options) already have proper globals
+      // 2. Service Worker needs different polyfills which are added in after-build.js
+      // The after-build.js script adds shims only to the bundled background.js
+
+      // Always disable code splitting for background (Service Worker compatibility)
+      // This must be applied in both development and production modes
+      neutrino.config
+        .optimization
+          .merge({
+            splitChunks: {
+              cacheGroups: {
+                // Disable all code splitting for background entry
+                default: {
+                  chunks: (chunk) => chunk.name !== 'background' && chunk.name !== 'offscreen',
+                },
+                vendors: {
+                  chunks: (chunk) => chunk.name !== 'background' && chunk.name !== 'offscreen',
+                }
+              }
+            },
+            // Don't create a separate runtime chunk for background
+            runtimeChunk: {
+              name: (entrypoint) => {
+                if (entrypoint.name === 'background' || entrypoint.name === 'offscreen') {
+                  return false // Don't separate runtime for service worker entries
+                }
+                return 'runtime'
+              }
+            }
+          })
+
       if (argv.mode === 'production') {
         // prettier-ignore
         neutrino.config

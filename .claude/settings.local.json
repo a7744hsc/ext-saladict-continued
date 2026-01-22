@@ -16,7 +16,15 @@
       "Bash(npm run devbuild:*)",
       "Bash(yarn build)",
       "Bash(cmd /c \"set NODE_OPTIONS=--openssl-legacy-provider && yarn build\")",
-      "Bash($env:NODE_OPTIONS=\"--openssl-legacy-provider\")"
+      "Bash($env:NODE_OPTIONS=\"--openssl-legacy-provider\")",
+      "Bash(yarn add:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(python3:*)",
+      "Bash(node -e:*)",
+      "Bash(awk:*)",
+      "Bash(printf:*)"
     ]
   }
 }

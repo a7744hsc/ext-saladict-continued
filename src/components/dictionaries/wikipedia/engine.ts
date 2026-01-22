@@ -1,4 +1,4 @@
-import { fetchDirtyDOM } from '@/_helpers/fetch-dom'
+import { fetchDirtyDOM } from '@/_helpers/fetch-dom-sw'
 import { isContainJapanese, isContainChinese } from '@/_helpers/lang-check'
 import {
   handleNoResult,

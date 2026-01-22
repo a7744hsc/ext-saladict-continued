@@ -1,4 +1,4 @@
-import { fetchDirtyDOM } from '@/_helpers/fetch-dom'
+import { fetchDirtyDOM } from '@/_helpers/fetch-dom-sw'
 import {
   HTMLString,
   getInnerHTML,

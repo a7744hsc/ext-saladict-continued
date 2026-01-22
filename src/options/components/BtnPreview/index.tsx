@@ -6,14 +6,14 @@ import { Button } from 'antd'
 import { StoreAction } from '@/content/redux/modules'
 import { useTranslate } from '@/_helpers/i18n'
 import { newWord } from '@/_helpers/record-manager'
-import { getWordOfTheDay } from '@/_helpers/wordoftheday'
 import { useIsShowDictPanel } from '@/options/helpers/panel-store'
 import { PreviewIcon } from './PreviewIcon'
 
 import './_style.scss'
 
-// pre-fetch the word
-const pWordOfTheDay = getWordOfTheDay()
+// Use a simple default word instead of fetching word of the day
+// This avoids importing cheerio into the options page bundle
+const DEFAULT_PREVIEW_WORD = 'salad'
 
 export const BtnPreview: FC = () => {
   const { t, ready } = useTranslate('options')
@@ -43,7 +43,7 @@ export const BtnPreview: FC = () => {
             dispatch({
               type: 'SEARCH_START',
               payload: {
-                word: newWord({ text: await pWordOfTheDay })
+                word: newWord({ text: DEFAULT_PREVIEW_WORD })
               }
             })
           }}

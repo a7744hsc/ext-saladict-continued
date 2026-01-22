@@ -1,33 +1,15 @@
-import { fetchDirtyDOM } from '@/_helpers/fetch-dom'
-import { first } from '@/_helpers/promise-more'
-import { handleNoResult, getText } from '@/components/dictionaries/helpers'
+// Word of the Day feature is disabled to reduce bundle size
+// The feature required cheerio which is only available in Service Worker
 
 export async function getWordOfTheDay(): Promise<string> {
-  if (!process.env.DEBUG) {
-    try {
-      return await first([
-        getWebsterWordOfTheDay(),
-        getDictionaryWordOfTheDay()
-      ])
-    } catch (e) {}
-  }
+  // Return default word - actual word of the day feature is disabled
   return 'salad'
 }
 
 export async function getWebsterWordOfTheDay(): Promise<string> {
-  const doc = await fetchDirtyDOM(
-    'https://www.merriam-webster.com/word-of-the-day'
-  )
-  const text = getText(doc, 'title')
-  const matchResult = text.match(/Word of the Day: (.+) \| Merriam-Webster/)
-  return (matchResult && matchResult[1]) || handleNoResult()
+  return 'salad'
 }
 
 export async function getDictionaryWordOfTheDay(): Promise<string> {
-  const doc = await fetchDirtyDOM('https://www.dictionary.com/wordoftheday/')
-  const text = getText(doc, 'title')
-  const matchResult = text.match(
-    /Get the Word of the Day - (.+) \| Dictionary\.com/
-  )
-  return (matchResult && matchResult[1]) || handleNoResult()
+  return 'salad'
 }

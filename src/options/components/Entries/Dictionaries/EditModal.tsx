@@ -1,6 +1,5 @@
 import React, { FC, useContext } from 'react'
 import { shallowEqual } from 'react-redux'
-import { Translator } from '@opentranslate/translator'
 import { Switch, Select, Checkbox, Button, Modal } from 'antd'
 import { ExclamationCircleOutlined } from '@ant-design/icons'
 import { Rule } from 'antd/lib/form'
@@ -154,16 +153,10 @@ export const EditModal: FC<EditModalProps> = ({ dictID, onClose }) => {
               break
             case 'string':
               if (optKey === 'tl' || optKey === 'tl2') {
-                const getTranslator:
-                  | undefined
-                  | (() => Translator) = require(`@/components/dictionaries/${dictID}/engine`)
-                  .getTranslator
-
-                const langs = getTranslator
-                  ? getTranslator()
-                      .getSupportLanguages()
-                      .map(lang => (lang === 'auto' ? 'default' : lang))
-                  : allDicts[dictID]['options_sel'][optKey]
+                // Use supportedLangs instead of dynamically importing engine
+                // This avoids bundling cheerio and dictionary engines into options
+                const langs = allDicts[dictID]['options_sel'][optKey] ||
+                  ['default', ...Object.keys(supportedLangs)]
 
                 item.children = (
                   <Select>

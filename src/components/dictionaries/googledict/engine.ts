@@ -12,7 +12,7 @@ import {
   removeChild
 } from '../helpers'
 import { getStaticSpeaker } from '@/components/Speaker'
-import { fetchPlainText } from '@/_helpers/fetch-dom'
+import { fetchPlainText, parseHTML } from '@/_helpers/fetch-dom-sw'
 
 export const getSrcPage: GetSrcPageFunction = text => {
   return (
@@ -58,8 +58,8 @@ export const search: SearchFunction<GoogleDictResult> = async (
 
   function handleDOM(
     bodyText: string
-  ): GoogleDictSearchResult | Promise<GoogleDictSearchResult> {
-    const doc = new DOMParser().parseFromString(bodyText, 'text/html')
+  ): GoogleDictSearchResult {
+    const doc = parseHTML(bodyText)
 
     // mend fragments
     extFragements(bodyText).forEach(({ id, innerHTML }) => {
@@ -113,7 +113,8 @@ export const search: SearchFunction<GoogleDictResult> = async (
         .querySelectorAll('[role=listitem] > [jsname=F457ec]')
         .forEach($word => {
           // let saladict jump into the words
-          const $a = document.createElement('a')
+          // Use doc.createElement instead of document.createElement for Service Worker compatibility
+          const $a = doc.createElement('a')
           $a.textContent = getText($word)
           Array.from($word.childNodes).forEach($child => {
             $child.remove()
